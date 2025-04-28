@@ -172,32 +172,53 @@ body {
  }
 
 .user-info {
+    padding: 15px;
+    background-color: var(--background-color-light);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
+    align-items: center; /* Vertically align items */
+    justify-content: space-between; /* Space out name/username and logout button */
+    position: relative; /* Needed for username change container positioning */
 }
-.user-info span {
-    font-weight: 500;
+
+.user-info #user-display-name {
+    display: flex;
+    flex-direction: column; /* Stack display name and username */
+    line-height: 1.3;
+    color: var(--text-primary);
+    overflow: hidden; /* Prevent long names/emails from breaking layout */
+    text-overflow: ellipsis;
+    white-space: nowrap; /* Keep display name on one line */
+    margin-right: 10px; /* Space between name block and logout button */
+}
+
+.user-info .user-display-name {
+    font-weight: 500; /* Make display name slightly bolder */
+    font-size: 0.95rem;
+}
+
+.user-info .user-username {
+    font-size: 0.8rem; /* Smaller font size */
+    font-style: italic; /* Italic font style */
+    color: var(--text-secondary); /* Lighter color */
+    margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    margin-right: 10px;
-     max-width: 180px; /* Prevent pushing logout button too far */
 }
-#logout-button {
+
+.user-info #logout-button {
     background: none;
     border: none;
-    color: var(--text-sidebar);
+    color: var(--text-secondary);
+    font-size: 1rem;
     cursor: pointer;
-    font-size: 1.1rem;
     padding: 5px;
-     flex-shrink: 0; /* Prevent button from shrinking */
- }
- #logout-button:hover {
-     color: #fff;
- }
+}
 
+.user-info #logout-button:hover {
+    color: var(--primary-color);
+}
 
 .sidebar-section h3 {
     font-size: 0.8rem;
@@ -538,3 +559,84 @@ body {
          max-width: 85%; /* Allow slightly wider messages on mobile */
      }
  }
+
+/* Username Change UI */
+.username-change-container {
+    /* Example positioning - adjust as needed */
+    position: absolute; /* Position relative to .user-info */
+    bottom: -50px; /* Position below the user-info box */
+    left: 10px;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    background-color: var(--background-color-light);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-top: 5px; /* Space from user-info */
+}
+
+.username-change-container input {
+    flex-grow: 1;
+    margin-right: 5px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background-color: var(--background-color);
+    color: var(--text-primary);
+}
+
+.username-change-container button {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+}
+
+.username-change-container #username-change-message {
+    position: absolute;
+    bottom: -20px; /* Position message below the input/button */
+    left: 0;
+    font-size: 0.75rem;
+    width: 100%;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: var(--secondary-bg);
+    padding: 30px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    max-width: 400px;
+    width: 90%;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: var(--text-primary);
+}
+
+.modal-content p {
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+}

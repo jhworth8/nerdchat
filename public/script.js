@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const signupNameInput = document.getElementById('signup-name');
     const signupEmailInput = document.getElementById('signup-email');
     const signupPasswordInput = document.getElementById('signup-password');
+    const signupUsernameInput = document.getElementById('signup-username');
     const signupButton = document.getElementById('signup-button');
     const googleSignupButton = document.getElementById('google-signup-button');
 
@@ -87,16 +88,40 @@ document.addEventListener('DOMContentLoaded', function() {
                      chatContainer.style.display = 'flex';
                      hideLoadingMessage();
 
-                     setupUserProfile(user);
-                     loadUserData(user.uid);
-                     userDisplayName.textContent = user.displayName || user.email;
-                     userDisplayName.title = user.email;
+                     // Fetch user data (including username) and then setup UI
+                     database.ref('users/' + user.uid).once('value').then(snapshot => {
+                         if (snapshot.exists()) {
+                             const userData = snapshot.val();
+                             updateUserInfoDisplay(userData.displayName || user.email, userData.username, user.email);
+                         } else {
+                             // Fallback if profile doesn't exist yet (should be rare)
+                             console.warn("User profile not found on login, setting up default.");
+                             setupUserProfile(user).then(() => {
+                                 updateUserInfoDisplay(user.displayName || user.email, null, user.email); // Show without username initially
+                             });
+                         }
+                         loadUserData(user.uid); // Load friends/search after getting profile
+                     }).catch(error => {
+                         console.error("Error fetching user profile on login:", error);
+                         updateUserInfoDisplay(user.displayName || user.email, null, user.email); // Show fallback
+                         loadUserData(user.uid); // Still try to load other data
+                     });
                  } else {
                      // User was already logged in, maybe profile updated?
                      currentUser = user; // Update currentUser just in case
-                      userDisplayName.textContent = user.displayName || user.email;
-                      userDisplayName.title = user.email;
-                      console.log("Auth state update for already logged-in user.");
+                     // Re-fetch profile data in case display name or username changed
+                     database.ref('users/' + user.uid).once('value').then(snapshot => {
+                         if (snapshot.exists()) {
+                             const userData = snapshot.val();
+                             updateUserInfoDisplay(userData.displayName || user.email, userData.username, user.email);
+                         } else {
+                              updateUserInfoDisplay(user.displayName || user.email, null, user.email);
+                         }
+                     }).catch(error => {
+                         console.error("Error fetching user profile on auth update:", error);
+                         updateUserInfoDisplay(user.displayName || user.email, null, user.email);
+                     });
+                     console.log("Auth state change detected for already logged-in user.");
                  }
 
              } else {
@@ -202,37 +227,62 @@ document.addEventListener('DOMContentLoaded', function() {
         const name = signupNameInput.value.trim();
         const email = signupEmailInput.value.trim();
         const password = signupPasswordInput.value.trim();
+        const username = signupUsernameInput.value.trim().toLowerCase();
         clearAuthMessages();
 
-         if (!name || !email || !password) { showAuthError("Please fill in all fields."); return; }
-         if (password.length < 6) { showAuthError("Password should be at least 6 characters."); return; }
+        if (!name || !email || !password || !username) { 
+            showAuthError("Please fill in all fields."); 
+            return; 
+        }
+        if (password.length < 6) { 
+            showAuthError("Password should be at least 6 characters."); 
+            return; 
+        }
+        if (username.length < 3) {
+            showAuthError("Username should be at least 3 characters.");
+            return;
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            showAuthError("Username can only contain letters, numbers, and underscores.");
+            return;
+        }
 
-        showAuthSuccess("Signing up..."); // Provide feedback
+        showAuthSuccess("Creating account...");
 
+        // Attempt to create user directly. DB rules will handle username conflicts.
         auth.createUserWithEmailAndPassword(email, password)
             .then((userCredential) => {
-                 showAuthSuccess("Signup successful! Updating profile...");
-                 const userId = userCredential.user.uid;
-                 const nameLower = name.toLowerCase();
-                 // Update Auth profile
-                 return userCredential.user.updateProfile({ displayName: name })
-                     .then(() => {
-                         // Create DB profile
-                         const userRef = database.ref('users/' + userId);
-                         return userRef.set({
-                             displayName: name,
-                             displayName_lower: nameLower, // STORE LOWERCASE FOR SEARCH
-                             email: email,
-                             createdAt: firebase.database.ServerValue.TIMESTAMP
-                         });
-                     });
+                const userId = userCredential.user.uid;
+                
+                // Update Auth profile with display name
+                return userCredential.user.updateProfile({ displayName: name })
+                    .then(() => {
+                        // Create DB profile and reserve username
+                        const updates = {};
+                        updates[`users/${userId}`] = {
+                            displayName: name,
+                            displayName_lower: name.toLowerCase(),
+                            username: username,
+                            email: email,
+                            createdAt: firebase.database.ServerValue.TIMESTAMP
+                        };
+                        updates[`usernames/${username}`] = userId;
+                        
+                        return database.ref().update(updates);
+                    });
             })
             .then(() => {
-                console.log("Signup and profile creation successful.");
-                // onAuthStateChanged handles UI switch, clear success message slightly later
+                showAuthSuccess("Account created successfully!");
                 setTimeout(clearAuthMessages, 2000);
             })
-            .catch(err => handleAuthError(err, "Signup Error"));
+            .catch(error => {
+                // Check if the error is due to the username being taken (permission denied on write)
+                if (error.code === 'permission-denied' || error.message.includes('permission_denied') || error.message.includes('Username is already taken')) {
+                     showAuthError("Username is already taken. Please choose another one.");
+                } else {
+                     handleAuthError(error, "Signup Error");
+                }
+            });
     });
 
     // Email/Password Login
@@ -261,12 +311,108 @@ document.addEventListener('DOMContentLoaded', function() {
          auth.signInWithPopup(provider)
             .then((result) => {
                 console.log("Google Sign-in successful");
-                showAuthSuccess("Google Sign-in successful!");
-                // setupUserProfile called by onAuthStateChanged
+                const user = result.user;
+                
+                // Check if this is a new user
+                return database.ref('users/' + user.uid).once('value')
+                    .then(snapshot => {
+                        if (!snapshot.exists()) {
+                            // New user - show username creation modal
+                            showUsernameCreationModal(user);
+                        } else {
+                            showAuthSuccess("Google Sign-in successful!");
+                        }
+                    });
             }).catch(err => handleAuthError(err, "Google Sign-in Error"));
      };
     if(googleSigninButton) googleSigninButton.addEventListener('click', signInWithGoogle);
     if(googleSignupButton) googleSignupButton.addEventListener('click', signInWithGoogle);
+
+    // Username creation modal for Google sign-in
+    function showUsernameCreationModal(user) {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h2>Choose a Username</h2>
+                <p>Your username will be how other users find you in the directory.</p>
+                <input type="text" id="google-username" placeholder="Username (letters, numbers, _)" required>
+                <p id="google-username-error" style="color: var(--error-color); display: none;"></p>
+                <button id="set-username-button" class="btn-primary">Continue</button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const usernameInput = document.getElementById('google-username');
+        const usernameError = document.getElementById('google-username-error');
+        const setUsernameButton = document.getElementById('set-username-button');
+        
+        setUsernameButton.addEventListener('click', () => {
+            const username = usernameInput.value.trim().toLowerCase();
+            usernameError.style.display = 'none';
+            
+            if (username.length < 3) {
+                usernameError.textContent = 'Username should be at least 3 characters';
+                usernameError.style.display = 'block';
+                return;
+            }
+            if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                usernameError.textContent = 'Username can only contain letters, numbers, and underscores';
+                usernameError.style.display = 'block';
+                return;
+            }
+            
+            // Check if username is taken
+            database.ref('usernames/' + username).once('value')
+                .then(snapshot => {
+                    if (snapshot.exists()) {
+                        usernameError.textContent = 'Username is already taken';
+                        usernameError.style.display = 'block';
+                        return Promise.reject(new Error('Username taken'));
+                    }
+                    
+                    const updates = {};
+                    updates[`users/${user.uid}`] = {
+                        displayName: user.displayName,
+                        displayName_lower: user.displayName.toLowerCase(),
+                        username: username,
+                        email: user.email,
+                        createdAt: firebase.database.ServerValue.TIMESTAMP
+                    };
+                    updates[`usernames/${username}`] = user.uid;
+                    
+                    return database.ref().update(updates);
+                })
+                .then(() => {
+                    modal.remove();
+                    showAuthSuccess("Account created successfully!");
+                    // Explicitly update the UI after username is set
+                    updateUserInfoDisplay(user.displayName, username, user.email);
+                })
+                .catch(error => {
+                    if (error.message !== 'Username taken') {
+                        console.error("Error creating account:", error);
+                        usernameError.textContent = 'Error creating account. Please try again.';
+                        usernameError.style.display = 'block';
+                    }
+                });
+        });
+    }
+
+    // Update user info display in the sidebar
+    function updateUserInfoDisplay(displayName, username, email) {
+        if (!userDisplayName) return;
+
+        const nameHtml = `Hey, ${escapeHtml(displayName)}`;
+        const usernameHtml = username ? `<div class="user-username">@${escapeHtml(username)}</div>` : '';
+
+        userDisplayName.innerHTML = `
+            <div class="user-display-name">${nameHtml}</div>
+            ${usernameHtml}
+        `;
+        userDisplayName.title = escapeHtml(email); // Set tooltip to email
+    }
 
     // Logout
     if(logoutButton) logoutButton.addEventListener('click', () => {
@@ -281,7 +427,7 @@ document.addEventListener('DOMContentLoaded', function() {
      // --- User Profile and Data Loading ---
 
      function setupUserProfile(user) {
-        if (!user) return Promise.resolve(); // No user, nothing to do
+        if (!user) return Promise.resolve();
 
         const userRef = database.ref('users/' + user.uid);
         return userRef.once('value').then((snapshot) => {
@@ -353,66 +499,77 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Friends List ---
     function loadFriends(userId) {
         if (!userId) return;
+        
         // Detach previous listener first
         if (friendsRef && friendsListenerHandle) {
             friendsRef.off('value', friendsListenerHandle);
             console.log("Detached previous friends listener.");
-         }
+        }
 
-         friendsRef = database.ref('users/' + userId + '/friends');
-         if(friendsList) friendsList.innerHTML = '<li class="placeholder-message">Loading friends...</li>'; // Show loading
+        friendsRef = database.ref('users/' + userId + '/friends');
+        if(friendsList) {
+            friendsList.innerHTML = '<li class="placeholder-message">Loading friends...</li>';
+        }
 
-         friendsListenerHandle = friendsRef.on('value', snapshot => {
-             if (!friendsList) return; // Exit if element doesn't exist
-             friendsList.innerHTML = ''; // Clear current list
+        friendsListenerHandle = friendsRef.on('value', snapshot => {
+            if (!friendsList) return; // Exit if element doesn't exist
+            friendsList.innerHTML = ''; // Clear current list
 
-             if (!snapshot.exists() || !snapshot.hasChildren()) {
-                friendsList.innerHTML = '<li class="placeholder-message">No friends yet. Find users above!</li>';
+            if (!snapshot.exists() || !snapshot.hasChildren()) {
+                friendsList.innerHTML = '<li class="placeholder-message">Your friends list is empty.</li>';
                 checkChatClosure(); // Check if current chat friend was removed
                 return;
-             }
+            }
 
-             const friendPromises = [];
-             snapshot.forEach(friendSnapshot => {
-                 const friendId = friendSnapshot.key;
-                 const promise = database.ref('users/' + friendId).once('value');
-                 friendPromises.push({id: friendId, promise: promise});
-             });
+            const friendPromises = [];
+            snapshot.forEach(friendSnapshot => {
+                const friendId = friendSnapshot.key;
+                const promise = database.ref('users/' + friendId).once('value');
+                friendPromises.push({id: friendId, promise: promise});
+            });
 
-             Promise.all(friendPromises.map(p => p.promise)).then(userSnaps => {
-                  if (!friendsList) return; // Check again in case user logged out during async fetch
-                  friendsList.innerHTML = ''; // Clear loading/previous render
+            Promise.all(friendPromises.map(p => p.promise))
+                .then(userSnaps => {
+                    if (!friendsList) return; // Check again in case user logged out during async fetch
+                    friendsList.innerHTML = ''; // Clear loading/previous render
 
-                  let friendsFound = false;
-                  userSnaps.forEach((userSnap, index) => {
-                       const friendId = friendPromises[index].id;
-                       if (userSnap.exists()) {
-                           const friendData = userSnap.val();
-                           renderFriendItem(friendId, friendData.displayName || friendData.email);
-                           friendsFound = true;
-                       } else {
-                           console.warn("Friend data not found for ID:", friendId);
-                           // Consider removing stale friend entry here if desired
-                       }
-                  });
+                    let friendsFound = false;
+                    userSnaps.forEach((userSnap, index) => {
+                        const friendId = friendPromises[index].id;
+                        if (userSnap.exists()) {
+                            const friendData = userSnap.val();
+                            renderFriendItem(friendId, friendData.displayName || friendData.email);
+                            friendsFound = true;
+                        } else {
+                            console.warn("Friend data not found for ID:", friendId);
+                            // Remove stale friend entry
+                            removeFriend(userId, friendId);
+                        }
+                    });
 
-                  if (!friendsFound && friendsList.innerHTML === '') {
-                      friendsList.innerHTML = '<li class="placeholder-message">No valid friend profiles found.</li>';
-                  }
+                    if (!friendsFound && friendsList.innerHTML === '') {
+                        friendsList.innerHTML = '<li class="placeholder-message">No valid friend profiles found.</li>';
+                    }
 
-                  checkChatClosure(); // Check if current chat friend was removed
+                    checkChatClosure(); // Check if current chat friend was removed
+                })
+                .catch(error => {
+                    console.error("Error fetching friend details:", error);
+                    if(friendsList) {
+                        friendsList.innerHTML = '<li class="placeholder-message" style="color: var(--error-color);">Error loading friends. Please try refreshing.</li>';
+                    }
+                });
+        }, error => {
+            console.error("Error loading friends list:", error);
+            if(friendsList) {
+                friendsList.innerHTML = '<li class="placeholder-message" style="color: var(--error-color);">Error loading friends. Please try refreshing.</li>';
+            }
+            if (friendsRef && friendsListenerHandle) {
+                friendsRef.off('value', friendsListenerHandle); // Detach on error
+            }
+        });
 
-             }).catch(error => {
-                 console.error("Error fetching friend details:", error);
-                 if(friendsList) friendsList.innerHTML = '<li class="placeholder-message" style="color: var(--error-color);">Error loading friends.</li>';
-             });
-
-         }, error => {
-             console.error("Error loading friends list:", error);
-             if(friendsList) friendsList.innerHTML = '<li class="placeholder-message" style="color: var(--error-color);">Error loading friends.</li>';
-             if (friendsRef && friendsListenerHandle) friendsRef.off('value', friendsListenerHandle); // Detach on error
-         });
-         console.log("Attached friends listener for", userId);
+        console.log("Attached friends listener for", userId);
     }
      // Helper to check if the open chat needs closing after friends list update
      function checkChatClosure() {
@@ -505,64 +662,95 @@ document.addEventListener('DOMContentLoaded', function() {
      function setupUserSearch(currentUserId) {
         if (!userSearchInput) return;
 
+        // Show initial results when search box is focused
+        userSearchInput.addEventListener('focus', () => {
+            if (userSearchInput.value.trim() === '') {
+                searchUsers('', currentUserId);
+            }
+        });
+
+        // Handle input changes with debouncing
         userSearchInput.addEventListener('input', () => {
             clearTimeout(searchTimeout);
             const query = userSearchInput.value.trim().toLowerCase();
 
             if (query.length < 1) {
-                 if(searchResultsList) searchResultsList.innerHTML = '<li class="placeholder-message">Start typing to find users.</li>';
-                 return;
+                searchUsers('', currentUserId);
+                return;
             }
 
-             if(searchResultsList) searchResultsList.innerHTML = '<li class="placeholder-message">Searching...</li>';
+            if(searchResultsList) searchResultsList.innerHTML = '<li class="placeholder-message">Searching...</li>';
 
             searchTimeout = setTimeout(() => {
-                console.log("Searching for users matching:", query);
-                const usersRef = database.ref('users');
-                usersRef.orderByChild('displayName_lower')
-                       .startAt(query)
-                       .endAt(query + '\uf8ff')
-                       .limitToFirst(10)
-                       .once('value')
-                       .then(snapshot => {
-                            if (!searchResultsList) return; // Check if element still exists
-                            searchResultsList.innerHTML = ''; // Clear "Searching..." or previous results
-                             let found = false;
-                             const promises = [];
-
-                             if (snapshot.exists()){
-                                 snapshot.forEach(userSnap => {
-                                     const userData = userSnap.val();
-                                     const userId = userSnap.key;
-
-                                     if (userId !== currentUserId) {
-                                          const friendCheckPromise = database.ref(`users/${currentUserId}/friends/${userId}`).once('value')
-                                              .then(friendSnap => {
-                                                  if (!friendSnap.exists()) {
-                                                      renderSearchResultItem(userId, userData.displayName || userData.email);
-                                                      found = true;
-                                                  }
-                                              });
-                                          promises.push(friendCheckPromise);
-                                     }
-                                 });
-                             }
-
-                             return Promise.all(promises).then(() => {
-                                 if (!found && searchResultsList.innerHTML === '') {
-                                     searchResultsList.innerHTML = '<li class="placeholder-message">No new users found matching "' + escapeHtml(query) + '".</li>';
-                                 }
-                             });
-                       })
-                       .catch(error => {
-                           console.error("Error searching users:", error);
-                           if(searchResultsList) searchResultsList.innerHTML = '<li class="placeholder-message" style="color: var(--error-color);">Search error.</li>';
-                       });
+                searchUsers(query, currentUserId);
             }, 350);
         });
-     }
+    }
 
-     function renderSearchResultItem(userId, userName) {
+    function searchUsers(query, currentUserId) {
+        if (!searchResultsList) return;
+        
+        const usersRef = database.ref('users');
+        let searchQuery = usersRef.orderByChild('username');
+
+        if (query) {
+            searchQuery = searchQuery.startAt(query).endAt(query + '\uf8ff');
+        }
+
+        searchQuery.limitToFirst(10).once('value')
+            .then(snapshot => {
+                if (!searchResultsList) return;
+                searchResultsList.innerHTML = ''; // Clear previous results
+                
+                if (!snapshot.exists()) {
+                    searchResultsList.innerHTML = '<li class="placeholder-message">No users found.</li>';
+                    return;
+                }
+
+                const promises = [];
+                let found = false;
+
+                snapshot.forEach(userSnap => {
+                    const userData = userSnap.val();
+                    const userId = userSnap.key;
+
+                    // Skip current user
+                    if (userId === currentUserId) return;
+
+                    const friendCheckPromise = database.ref(`users/${currentUserId}/friends/${userId}`).once('value')
+                        .then(friendSnap => {
+                            if (!friendSnap.exists()) {
+                                renderSearchResultItem(userId, userData.username || userData.displayName || userData.email);
+                                found = true;
+                            }
+                        });
+                    promises.push(friendCheckPromise);
+                });
+
+                return Promise.all(promises).then(() => {
+                    if (!found && searchResultsList.innerHTML === '') {
+                        searchResultsList.innerHTML = query 
+                            ? `<li class="placeholder-message">No new users found matching "${escapeHtml(query)}".</li>`
+                            : '<li class="placeholder-message">Type to search for users.</li>';
+                    } else if (!found && !query) {
+                        searchResultsList.innerHTML = '<li class="placeholder-message">Type to search for users.</li>';
+                    }
+                });
+            })
+            .catch(error => {
+                console.error("Error searching users:", error);
+                if(searchResultsList) {
+                    // Display error based on the actual error code if possible
+                    if (error.code === 'PERMISSION_DENIED') {
+                        searchResultsList.innerHTML = '<li class="placeholder-message" style="color: var(--error-color);">Search failed: Check database rules/indexes.</li>';
+                    } else {
+                        searchResultsList.innerHTML = '<li class="placeholder-message" style="color: var(--error-color);">Error searching users. Please try again.</li>';
+                    }
+                }
+            });
+    }
+
+    function renderSearchResultItem(userId, userName) {
         if (!searchResultsList) return;
          const li = document.createElement('li');
 
@@ -593,46 +781,52 @@ document.addEventListener('DOMContentLoaded', function() {
      }
 
 
+    // --- Chat ID Generation ---
+    function getChatId(uid1, uid2) {
+        // Sort UIDs alphabetically to ensure consistency
+        return uid1 < uid2 ? `${uid1}_${uid2}` : `${uid2}_${uid1}`;
+    }
+
     // --- Chat Functionality ---
     function openChat(friendId, friendName) {
-         if (currentChatFriendId === friendId || !currentUser) {
-             console.log("Chat open condition not met:", currentChatFriendId, friendId, currentUser);
-             return;
-         }
-         console.log(`Opening chat with: ${friendId} (${friendName})`);
+        if (currentChatFriendId === friendId || !currentUser) {
+            console.log("Chat open condition not met:", currentChatFriendId, friendId, currentUser);
+            return;
+        }
+        console.log(`Opening chat with: ${friendId} (${friendName})`);
 
-         closeChat(false); // Close previous chat listeners without full UI reset
+        closeChat(false); // Close previous chat listeners without full UI reset
 
-         currentChatFriendId = friendId;
+        currentChatFriendId = friendId;
 
-         if(chatHeaderName) chatHeaderName.textContent = escapeHtml(friendName);
-         if(messageInputContainer) messageInputContainer.style.display = 'flex';
-         if(chatPlaceholder) chatPlaceholder.style.display = 'none';
-         if(messagesDiv) messagesDiv.innerHTML = ''; // Clear messages
-         if(messageInput) messageInput.value = '';
-         if(sendButton) sendButton.disabled = true;
-         if(messageInput) autoExpandTextarea(messageInput);
+        if(chatHeaderName) chatHeaderName.textContent = escapeHtml(friendName);
+        if(messageInputContainer) messageInputContainer.style.display = 'flex';
+        if(chatPlaceholder) chatPlaceholder.style.display = 'none';
+        if(messagesDiv) messagesDiv.innerHTML = ''; // Clear messages
+        if(messageInput) messageInput.value = '';
+        if(sendButton) sendButton.disabled = true;
+        if(messageInput) autoExpandTextarea(messageInput);
 
-         const chatId = currentUser.uid < friendId ? `${currentUser.uid}_${friendId}` : `${friendId}_${currentUser.uid}`;
-         currentMessagesRef = database.ref(`messages/${chatId}`).orderByChild('timestamp').limitToLast(50);
+        // Use combined chat ID
+        const chatId = getChatId(currentUser.uid, friendId);
+        console.log(`Calculated Chat ID: ${chatId}`);
+        currentMessagesRef = database.ref(`messages/${chatId}`).orderByChild('timestamp').limitToLast(50);
 
-         messageListenerHandle = currentMessagesRef.on('child_added', snapshot => {
-             if (snapshot.exists()) {
-                 const messageData = snapshot.val();
-                 // Ensure we only display messages for the *currently open* chat
-                 // (Handles race conditions if user switches chats quickly)
-                 if (currentChatFriendId === friendId) {
+        messageListenerHandle = currentMessagesRef.on('child_added', snapshot => {
+            if (snapshot.exists()) {
+                const messageData = snapshot.val();
+                if (currentChatFriendId === friendId) {
                     displayMessage(snapshot.key, messageData.senderId, messageData.text, messageData.senderName || null, messageData.timestamp);
-                 }
-             }
-         }, error => {
-             console.error("Error loading messages:", error);
-              if(messagesDiv) messagesDiv.innerHTML = '<p style="color: red; text-align: center;">Error loading messages.</p>';
-             if (currentMessagesRef && messageListenerHandle) currentMessagesRef.off('child_added', messageListenerHandle);
-         });
-         console.log("Attached message listener for chat:", chatId);
+                }
+            }
+        }, error => {
+            console.error("Error loading messages:", error);
+            if(messagesDiv) messagesDiv.innerHTML = '<p style="color: red; text-align: center;">Error loading messages.</p>';
+            if (currentMessagesRef && messageListenerHandle) currentMessagesRef.off('child_added', messageListenerHandle);
+        });
+        console.log("Attached message listener for chat:", chatId);
 
-         if(messageInput) messageInput.focus();
+        if(messageInput) messageInput.focus();
     }
 
      function closeChat(resetUI = true) {
@@ -715,7 +909,7 @@ document.addEventListener('DOMContentLoaded', function() {
          const text = messageInput.value.trim();
          if (text === '') return;
 
-         const chatId = currentUser.uid < currentChatFriendId ? `${currentUser.uid}_${currentChatFriendId}` : `${currentChatFriendId}_${currentUser.uid}`;
+         const chatId = getChatId(currentUser.uid, currentChatFriendId);
          const messagesRef = database.ref(`messages/${chatId}`);
          const newMessageRef = messagesRef.push();
 
@@ -763,4 +957,75 @@ document.addEventListener('DOMContentLoaded', function() {
          }
      }
 
+    // Add username change functionality
+    function changeUsername(newUsername) {
+        if (!currentUser) return Promise.reject(new Error('Not logged in'));
+        
+        newUsername = newUsername.trim().toLowerCase();
+        if (newUsername.length < 3) {
+            return Promise.reject(new Error('Username should be at least 3 characters'));
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) {
+            return Promise.reject(new Error('Username can only contain letters, numbers, and underscores'));
+        }
+
+        const userId = currentUser.uid;
+        const currentUsername = currentUser.username;
+
+        // Check if new username is available
+        return database.ref('usernames/' + newUsername).once('value')
+            .then(snapshot => {
+                if (snapshot.exists() && snapshot.val() !== userId) {
+                    throw new Error('Username is already taken');
+                }
+
+                const updates = {};
+                // Update username reference
+                updates[`usernames/${newUsername}`] = userId;
+                if (currentUsername) {
+                    updates[`usernames/${currentUsername}`] = null; // Remove old username reference
+                }
+                // Update user profile
+                updates[`users/${userId}/username`] = newUsername;
+                
+                return database.ref().update(updates);
+            })
+            .then(() => {
+                console.log("Username updated successfully");
+                return true;
+            });
+    }
+
+    // Add username change UI
+    function setupUsernameChange() {
+        const usernameChangeContainer = document.createElement('div');
+        usernameChangeContainer.className = 'username-change-container';
+        usernameChangeContainer.innerHTML = `
+            <input type="text" id="new-username" placeholder="New username">
+            <button id="change-username-button">Change Username</button>
+            <p id="username-change-message"></p>
+        `;
+        
+        document.querySelector('.user-info').appendChild(usernameChangeContainer);
+        
+        const newUsernameInput = document.getElementById('new-username');
+        const changeUsernameButton = document.getElementById('change-username-button');
+        const usernameChangeMessage = document.getElementById('username-change-message');
+        
+        changeUsernameButton.addEventListener('click', () => {
+            const newUsername = newUsernameInput.value.trim();
+            usernameChangeMessage.textContent = '';
+            
+            changeUsername(newUsername)
+                .then(() => {
+                    usernameChangeMessage.textContent = 'Username changed successfully!';
+                    usernameChangeMessage.style.color = 'var(--success-color)';
+                    newUsernameInput.value = '';
+                })
+                .catch(error => {
+                    usernameChangeMessage.textContent = error.message;
+                    usernameChangeMessage.style.color = 'var(--error-color)';
+                });
+        });
+    }
 }); // End DOMContentLoaded
