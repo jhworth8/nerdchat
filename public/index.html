@@ -1,95 +1,124 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>NerdChat</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NerdChat V2</title>
 
+    <!-- Stylesheet -->
     <link rel="stylesheet" href="style.css">
 
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Google Fonts & Font Awesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" integrity="sha512-KfkfwYDsLkIlwQp6LFnl8zNdLGxu9YAA1QvwINks4PhcElQSvqcyVLLD9aMhXd13uQjoXtEKNosOWaZqXgel0g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
+    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-    </head>
+</head>
 <body>
 
-    <div id="app-container">
+    <!-- Main App Container -->
+    <div id="app-container" style="display: none;"> <!-- Hidden by default, shown when logged in -->
 
-        <div id="auth-container">
-            <div class="auth-box">
-                <div id="login-view">
-                    <h1>Welcome Back!</h1>
-                    <input type="email" id="login-email" placeholder="Email" required>
-                    <input type="password" id="login-password" placeholder="Password" required>
-                    <button id="login-button" class="btn-primary">Login</button>
-                    <button id="google-signin-button" class="btn-google"><i class="fab fa-google"></i>Sign in with Google</button>
-                    <p>Don't have an account? <a href="#" id="show-signup" class="auth-toggle-link">Sign Up</a></p>
+        <!-- Left Panel: Chat List -->
+        <aside id="chat-list-panel">
+            <header class="panel-header">
+                <div id="user-profile-area">
+                    <!-- User avatar/info will go here -->
+                    <span id="user-display-name"></span> 
                 </div>
-                <div id="signup-view" style="display: none;">
-                    <h1>Create Account</h1>
-                    <input type="text" id="signup-name" placeholder="Display Name" required>
-                    <input type="text" id="signup-username" placeholder="Username (letters, numbers, _)" required>
-                    <input type="email" id="signup-email" placeholder="Email" required>
-                    <input type="password" id="signup-password" placeholder="Password (min. 6 characters)" required>
-                    <button id="signup-button" class="btn-primary">Sign Up</button>
-                    <button id="google-signup-button" class="btn-google"><i class="fab fa-google"></i>Sign up with Google</button>
-                    <p>Already have an account? <a href="#" id="show-login" class="auth-toggle-link">Login</a></p>
+                <button id="new-chat-button" title="New Chat"><i class="fas fa-edit"></i></button>
+                <button id="logout-button" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+            </header>
+            <div class="list-container">
+                 <ul id="chat-list">
+                    <li class="placeholder-message">Loading chats...</li>
+                 </ul>
+            </div>
+        </aside>
+
+        <!-- Right Panel: Main Chat Area -->
+        <main id="main-chat-area">
+            <header id="chat-header">
+                <!-- Back Button (Mobile Chat View) -->
+                <button id="back-button" class="mobile-only"><i class="fas fa-arrow-left"></i></button>
+                <!-- Hamburger Menu Button (Mobile List View) -->
+                <button id="menu-toggle-button" class="mobile-only"><i class="fas fa-bars"></i></button>
+                <h2 id="chat-with-name">Select a chat</h2>
+                <!-- Add other chat controls here if needed -->
+            </header>
+            <div id="messages">
+                <!-- Placeholder when no chat is selected -->
+                <div id="chat-placeholder"> 
+                    <i class="fas fa-comments"></i>
+                    <p>Select a chat from the list to start messaging,<br> or start a new chat!</p>
                 </div>
-                 <p id="auth-error"></p>
-                 <p id="auth-success"></p>
+                <!-- Messages will be loaded here -->
+            </div>
+            <div id="message-input-container" style="display: none;"> 
+                <textarea id="message-input" placeholder="Type your message..." rows="1"></textarea>
+                <button id="send-button" disabled><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="auth-container"> <!-- Visible by default -->
+         <div class="auth-wrapper">
+             <div class="auth-box">
+                 <h1 class="auth-title">NerdChat</h1>
+                 <!-- Login View -->
+                 <div id="login-view">
+                     <h2>Welcome Back!</h2>
+                     <input type="email" id="login-email" placeholder="Email" required>
+                     <input type="password" id="login-password" placeholder="Password" required>
+                     <button id="login-button" class="btn-primary">Login</button>
+                     <button id="google-signin-button" class="btn-google"><i class="fab fa-google"></i> Sign in with Google</button>
+                     <p>No account? <a href="#" id="show-signup" class="auth-toggle-link">Sign Up</a></p>
+                 </div>
+                 <!-- Signup View -->
+                 <div id="signup-view" style="display: none;">
+                     <h2>Create Account</h2>
+                     <input type="text" id="signup-name" placeholder="Display Name" required>
+                     <input type="text" id="signup-username" placeholder="Username (letters, numbers, _)" required>
+                     <input type="email" id="signup-email" placeholder="Email" required>
+                     <input type="password" id="signup-password" placeholder="Password (min. 6 characters)" required>
+                     <button id="signup-button" class="btn-primary">Sign Up</button>
+                     <button id="google-signup-button" class="btn-google"><i class="fab fa-google"></i> Sign up with Google</button>
+                     <p>Already have an account? <a href="#" id="show-login" class="auth-toggle-link">Login</a></p>
+                 </div>
+                 <p id="auth-error" class="auth-message"></p>
+                 <p id="auth-success" class="auth-message"></p>
+             </div>
+         </div>
+    </div>
+
+    <!-- New Chat Modal (Hidden by default) -->
+    <div id="new-chat-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <header class="modal-header">
+                <h2>Start New Chat</h2>
+                <button id="close-modal-button" class="close-button">&times;</button>
+            </header>
+            <div class="modal-body">
+                <input type="text" id="user-search-input" placeholder="Search by username...">
+                <ul id="search-results">
+                    <li class="placeholder-message">Start typing to find users.</li>
+                </ul>
             </div>
         </div>
+    </div>
 
-        <div id="chat-container" style="display: none;"> <aside id="sidebar">
-                 <div class="sidebar-header">
-                     <h2>NerdChat</h2>
-                 </div>
-                <div class="user-info">
-                    <span id="user-display-name" title="">Loading...</span>
-                    <button id="logout-button" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
-                </div>
+    <!-- Loading Indicator -->
+    <p id="load" style="display: none;">Initializing...</p> 
 
-                <div class="sidebar-section">
-                    <h3>Find Users</h3>
-                    <div id="user-search-container">
-                        <input type="text" id="user-search-input" placeholder="Search by name...">
-                        <ul id="search-results">
-                            <li class="placeholder-message">Start typing to find users.</li>
-                        </ul>
-                    </div>
-                </div>
-
-                <div class="sidebar-section">
-                    <h3>Friends</h3>
-                    <ul id="friends-list">
-                        <li class="placeholder-message">Loading friends...</li>
-                    </ul>
-                </div>
-            </aside>
-
-            <main id="main-chat-area">
-                <header id="chat-header">
-                     <h2 id="chat-with-name">Select a friend to chat</h2>
-                </header>
-                <div id="messages">
-                    <div id="chat-placeholder" style="display: flex;"> <p><i class="fas fa-comments" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 15px;"></i></p>
-                         Select a friend from the list on the left to start chatting!
-                         <br>Or use the search bar to find and add new friends.
-                     </div>
-                </div>
-                <div id="message-input-container" style="display: none;"> <textarea id="message-input" placeholder="Type your message..." rows="1"></textarea>
-                    <button id="send-button" disabled><i class="fas fa-paper-plane"></i></button>
-                </div>
-            </main>
-
-        </div>
-
-        <p id="load">Initializing NerdChat...</p>
-
-    </div> <script defer src="script.js"></script>
+    <!-- Script -->
+    <script defer src="script.js"></script>
 
 </body>
 </html>
