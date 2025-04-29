@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>NerdChat V2</title>
 
     <!-- Stylesheet -->
@@ -32,6 +32,7 @@
                     <span id="user-display-name"></span> 
                 </div>
                 <button id="new-chat-button" title="New Chat"><i class="fas fa-edit"></i></button>
+                <button id="find-friends-button" class="neumorph-btn" title="Find Friends"><i class="fas fa-user-plus"></i> Find Friends</button>
                 <button id="logout-button" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
             </header>
             <div class="list-container">
@@ -109,6 +110,22 @@
                 <input type="text" id="user-search-input" placeholder="Search by username...">
                 <ul id="search-results">
                     <li class="placeholder-message">Start typing to find users.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Find Friends Modal (Hidden by default) -->
+    <div id="find-friends-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <header class="modal-header">
+                <h2>Find Friends</h2>
+                <button id="close-find-friends-modal" class="close-button">&times;</button>
+            </header>
+            <div class="modal-body">
+                <input type="text" id="find-friends-search" placeholder="Search users by username...">
+                <ul id="find-friends-list">
+                    <li class="placeholder-message">Loading users...</li>
                 </ul>
             </div>
         </div>

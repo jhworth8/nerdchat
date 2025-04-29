@@ -1062,4 +1062,97 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- Find Friends Modal Logic ---
+    const findFriendsButton = document.getElementById('find-friends-button');
+    const findFriendsModal = document.getElementById('find-friends-modal');
+    const closeFindFriendsModal = document.getElementById('close-find-friends-modal');
+    const findFriendsSearch = document.getElementById('find-friends-search');
+    const findFriendsList = document.getElementById('find-friends-list');
+    let allUsersCache = [];
+    let findFriendsTimeout;
+
+    if (findFriendsButton && findFriendsModal && closeFindFriendsModal && findFriendsSearch && findFriendsList) {
+        findFriendsButton.addEventListener('click', () => {
+            findFriendsModal.style.display = 'flex';
+            findFriendsSearch.value = '';
+            findFriendsList.innerHTML = '<li class="placeholder-message">Loading users...</li>';
+            // Load all users (up to 50)
+            database.ref('users').orderByChild('username').limitToFirst(50).once('value').then(snapshot => {
+                allUsersCache = [];
+                if (!snapshot.exists()) {
+                    findFriendsList.innerHTML = '<li class="placeholder-message">No users found.</li>';
+                    return;
+                }
+                snapshot.forEach(userSnap => {
+                    const userData = userSnap.val();
+                    allUsersCache.push({
+                        id: userSnap.key,
+                        username: userData.username,
+                        displayName: userData.displayName || ''
+                    });
+                });
+                renderFindFriendsList(allUsersCache, findFriendsList, currentUser ? currentUser.uid : null);
+            });
+        });
+        closeFindFriendsModal.addEventListener('click', () => {
+            findFriendsModal.style.display = 'none';
+        });
+        findFriendsModal.addEventListener('click', (e) => {
+            if (e.target === findFriendsModal) {
+                findFriendsModal.style.display = 'none';
+            }
+        });
+        findFriendsSearch.addEventListener('input', () => {
+            clearTimeout(findFriendsTimeout);
+            const query = findFriendsSearch.value.trim().toLowerCase();
+            findFriendsTimeout = setTimeout(() => {
+                let filtered = allUsersCache;
+                if (query.length > 0) {
+                    filtered = allUsersCache.filter(u =>
+                        (u.username && u.username.toLowerCase().includes(query)) ||
+                        (u.displayName && u.displayName.toLowerCase().includes(query))
+                    );
+                }
+                renderFindFriendsList(filtered, findFriendsList, currentUser ? currentUser.uid : null);
+            }, 200);
+        });
+    }
+
+    function renderFindFriendsList(users, listEl, currentUserId) {
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        // Get current friends to filter out
+        let currentFriends = [];
+        if (chatListEl) {
+            currentFriends = Array.from(chatListEl.querySelectorAll('li[data-chat-id]')).map(li => li.dataset.chatId);
+        }
+        let found = false;
+        users.forEach(user => {
+            if (user.id === currentUserId) return; // Skip self
+            if (currentFriends.includes(user.id)) return; // Skip existing friends
+            const li = document.createElement('li');
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = user.displayName ? `${escapeHtml(user.displayName)} (@${escapeHtml(user.username)})` : `@${escapeHtml(user.username)}`;
+            li.appendChild(nameSpan);
+            const actionsDiv = document.createElement('div');
+            actionsDiv.classList.add('search-result-actions');
+            const addButton = document.createElement('button');
+            addButton.title = 'Add Friend';
+            addButton.innerHTML = '<i class="fas fa-user-plus"></i>';
+            addButton.addEventListener('click', (e) => {
+                if (currentUser) {
+                    addFriendAndOpenChat(currentUser.uid, user.id, user.displayName || user.username);
+                    findFriendsModal.style.display = 'none';
+                }
+            });
+            actionsDiv.appendChild(addButton);
+            li.appendChild(actionsDiv);
+            listEl.appendChild(li);
+            found = true;
+        });
+        if (!found) {
+            listEl.innerHTML = '<li class="placeholder-message">No users found.</li>';
+        }
+    }
+
 }); // End DOMContentLoaded
