@@ -1,141 +1,136 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NerdChat V2</title>
-
-    <!-- Stylesheet -->
-    <link rel="stylesheet" href="style.css">
-
-    <!-- Google Fonts & Font Awesome -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" integrity="sha512-KfkfwYDsLkIlwQp6LFnl8zNdLGxu9YAA1QvwINks4PhcElQSvqcyVLLD9aMhXd13uQjoXtEKNosOWaZqXgel0g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>NerdChat V2</title>
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <script src="https://kit.fontawesome.com/your-kit.js" crossorigin="anonymous"></script>
+  <!-- Firebase & FirebaseUI -->
+  <link rel="stylesheet" href="https://www.gstatic.com/firebasejs/ui/6.0.2/firebase-ui-auth.css"/>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/ui/6.0.2/firebase-ui-auth.js"></script>
 </head>
-<body>
+<body class="flex h-screen bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 font-sans">
 
-    <!-- Main App Container -->
-    <div id="app-container" style="display: none;"> <!-- Hidden by default, shown when logged in -->
+  <!-- AUTH -->
+  <div id="firebaseui-auth-container"
+       class="m-auto w-full max-w-md p-8 bg-white rounded-lg shadow-lg">
+  </div>
 
-        <!-- Left Panel: Chat List -->
-        <aside id="chat-list-panel">
-            <header class="panel-header">
-                <div id="user-profile-area">
-                    <!-- User avatar/info will go here -->
-                    <span id="user-display-name"></span> 
-                </div>
-                <button id="new-chat-button" title="New Chat"><i class="fas fa-edit"></i></button>
-                <button id="find-friends-button" class="neumorph-btn" title="Find Friends"><i class="fas fa-user-plus"></i> Find Friends</button>
-                <button id="logout-button" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
-            </header>
-            <div class="list-container">
-                 <ul id="chat-list">
-                    <li class="placeholder-message">Loading chats...</li>
-                 </ul>
-            </div>
-        </aside>
-
-        <!-- Right Panel: Main Chat Area -->
-        <main id="main-chat-area">
-            <header id="chat-header">
-                <!-- Back Button (Mobile Chat View) -->
-                <button id="back-button" class="mobile-only"><i class="fas fa-arrow-left"></i></button>
-                <!-- Hamburger Menu Button (Mobile List View) -->
-                <button id="menu-toggle-button" class="mobile-only"><i class="fas fa-bars"></i></button>
-                <h2 id="chat-with-name">Select a chat</h2>
-                <!-- Add other chat controls here if needed -->
-            </header>
-            <div id="messages">
-                <!-- Placeholder when no chat is selected -->
-                <div id="chat-placeholder"> 
-                    <i class="fas fa-comments"></i>
-                    <p>Select a chat from the list to start messaging,<br> or start a new chat!</p>
-                </div>
-                <!-- Messages will be loaded here -->
-            </div>
-            <div id="message-input-container" style="display: none;"> 
-                <textarea id="message-input" placeholder="Type your message..." rows="1"></textarea>
-                <button id="send-button" disabled><i class="fas fa-paper-plane"></i></button>
-            </div>
-        </main>
-
-    </div>
-
-    <!-- Auth Screen -->
-    <div id="auth-container"> <!-- Visible by default -->
-         <div class="auth-wrapper">
-             <div class="auth-box">
-                 <h1 class="auth-title">NerdChat</h1>
-                 <!-- Login View -->
-                 <div id="login-view">
-                     <h2>Welcome Back!</h2>
-                     <input type="email" id="login-email" placeholder="Email" required>
-                     <input type="password" id="login-password" placeholder="Password" required>
-                     <button id="login-button" class="btn-primary">Login</button>
-                     <button id="google-signin-button" class="btn-google"><i class="fab fa-google"></i> Sign in with Google</button>
-                     <p>No account? <a href="#" id="show-signup" class="auth-toggle-link">Sign Up</a></p>
-                 </div>
-                 <!-- Signup View -->
-                 <div id="signup-view" style="display: none;">
-                     <h2>Create Account</h2>
-                     <input type="text" id="signup-name" placeholder="Display Name" required>
-                     <input type="text" id="signup-username" placeholder="Username (letters, numbers, _)" required>
-                     <input type="email" id="signup-email" placeholder="Email" required>
-                     <input type="password" id="signup-password" placeholder="Password (min. 6 characters)" required>
-                     <button id="signup-button" class="btn-primary">Sign Up</button>
-                     <button id="google-signup-button" class="btn-google"><i class="fab fa-google"></i> Sign up with Google</button>
-                     <p>Already have an account? <a href="#" id="show-login" class="auth-toggle-link">Login</a></p>
-                 </div>
-                 <p id="auth-error" class="auth-message"></p>
-                 <p id="auth-success" class="auth-message"></p>
-             </div>
-         </div>
-    </div>
-
-    <!-- New Chat Modal (Hidden by default) -->
-    <div id="new-chat-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <header class="modal-header">
-                <h2>Start New Chat</h2>
-                <button id="close-modal-button" class="close-button">&times;</button>
-            </header>
-            <div class="modal-body">
-                <input type="text" id="user-search-input" placeholder="Search by username...">
-                <ul id="search-results">
-                    <li class="placeholder-message">Start typing to find users.</li>
-                </ul>
-            </div>
+  <!-- APP -->
+  <div id="app-container" class="hidden flex flex-col w-full max-w-5xl mx-auto my-4 bg-white rounded-lg shadow-lg overflow-hidden">
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Chat List Panel -->
+      <aside id="chat-list-panel"
+             class="hidden md:flex flex-col w-1/3 border-r bg-white">
+        <div class="flex items-center justify-between p-4 border-b">
+          <div>
+            <h2 id="user-display-name" class="text-lg font-semibold"></h2>
+            <p id="user-username" class="text-sm text-gray-500"></p>
+          </div>
+          <button id="logout-btn" title="Logout"
+                  class="text-red-500 hover:text-red-700 ml-2">
+            <i class="fas fa-sign-out-alt"></i>
+          </button>
         </div>
-    </div>
 
-    <!-- New Find Friends Modal (Hidden by default) -->
-    <div id="find-friends-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <header class="modal-header">
-                <h2>Find Friends</h2>
-                <button id="close-find-friends-modal" class="close-button">&times;</button>
-            </header>
-            <div class="modal-body">
-                <input type="text" id="find-friends-search" placeholder="Search users by username...">
-                <ul id="find-friends-list">
-                    <li class="placeholder-message">Loading users...</li>
-                </ul>
-            </div>
+        <!-- Chat Search -->
+        <input id="chat-search-input"
+               type="text"
+               placeholder="Search chats…"
+               class="mx-2 my-2 p-2 w-[calc(100%-1rem)] border rounded focus:outline-none focus:ring"/>
+
+        <div id="chat-list"
+             class="flex-1 p-2 space-y-2 overflow-y-auto bg-gray-50">
+          <!-- chat items go here -->
         </div>
+        <div class="flex border-t">
+          <button id="new-chat-btn"
+                  class="flex-1 p-3 text-indigo-600 hover:bg-indigo-50"
+                  title="New Chat">
+            <i class="fas fa-edit mr-2"></i>New Chat
+          </button>
+          <button id="find-friends-btn"
+                  class="flex-1 p-3 text-indigo-600 hover:bg-indigo-50"
+                  title="Find Friends">
+            <i class="fas fa-user-plus mr-2"></i>Find Friends
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Chat Area -->
+      <main class="flex flex-col flex-1 bg-white">
+        <header class="flex items-center p-4 border-b">
+          <button id="menu-toggle"
+                  class="md:hidden text-gray-600 mr-4"
+                  title="Menu">
+            <i class="fas fa-bars"></i>
+          </button>
+          <h2 id="chat-header-name" class="text-xl font-semibold">
+            Select a chat
+          </h2>
+        </header>
+        <div id="messages"
+             class="flex-1 p-4 space-y-2 overflow-y-auto bg-gray-50">
+          <!-- messages go here -->
+        </div>
+        <div id="message-input-container"
+             class="hidden p-4 border-t flex items-end">
+          <textarea id="message-input"
+                    rows="1"
+                    placeholder="Type your message…"
+                    class="flex-1 p-2 border rounded resize-none focus:outline-none focus:ring"></textarea>
+          <button id="send-btn"
+                  disabled
+                  class="ml-2 px-4 py-2 bg-green-500 text-white rounded disabled:opacity-50">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+      </main>
     </div>
+  </div>
 
-    <!-- Loading Indicator  -->
-    <p id="load" style="display: none;">Initializing...</p> 
+  <!-- New Chat Modal -->
+  <div id="new-chat-modal"
+       class="fixed inset-0 hidden bg-black bg-opacity-50 items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-md p-4">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold">Start New Chat</h3>
+        <button id="close-new-chat" class="text-gray-500 hover:text-gray-700">
+          &times;
+        </button>
+      </div>
+      <input id="new-chat-input"
+             type="text"
+             placeholder="Search by username…"
+             class="w-full p-2 border rounded mb-4 focus:outline-none focus:ring"/>
+      <ul id="new-chat-results" class="max-h-60 overflow-y-auto space-y-2"></ul>
+    </div>
+  </div>
 
-    <!-- Script -->
-    <script defer src="script.js"></script>
+  <!-- Find Friends Modal -->
+  <div id="find-friends-modal"
+       class="fixed inset-0 hidden bg-black bg-opacity-50 items-center justify-center">
+    <div class="bg-white rounded-lg w-full max-w-md p-4">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold">Find Friends</h3>
+        <button id="close-find-friends" class="text-gray-500 hover:text-gray-700">
+          &times;
+        </button>
+      </div>
+      <input id="find-friends-input"
+             type="text"
+             placeholder="Filter users…"
+             class="w-full p-2 border rounded mb-4 focus:outline-none focus:ring"/>
+      <ul id="find-friends-list" class="max-h-60 overflow-y-auto space-y-2"></ul>
+    </div>
+  </div>
 
+  <script src="script.js"></script>
 </body>
 </html>
